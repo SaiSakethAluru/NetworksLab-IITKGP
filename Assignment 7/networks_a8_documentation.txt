@@ -1,0 +1,116 @@
+﻿Networks lab Assignment 7 Documentation
+
+
+Tabulation of average transmissions per character.
+Chosen message: abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwx
+Message length - 50 characters
+
+
+Drop probability
+	Total transmission (2 trials)
+	Average transmissions
+	Average transmission per character
+	0.05
+	54, 57
+	55.5
+	1.11
+	0.1
+	59,57
+	58
+	1.16
+	0.15
+	63,72
+	67.5
+	1.35
+	0.2*
+	84,89
+	86.5
+	1.73
+	0.25
+	98,86
+	92
+	1.84
+	0.3
+	97,108
+	112.5
+	2.05
+	0.35
+	121,125
+	123
+	2.46
+	0.4
+	130,136
+	133
+	2.66
+	0.45
+	161,159
+	160
+	3.2
+	0.5
+	205,197
+	201
+	4.02
+	
+
+The message structure sent and received between the sockets is 
+
+
+Char indictor
+	Message id
+	Message
+	
+
+Here, the char indicator is a 1 byte (1 character) that indicates whether a message is an application message or an acknowledgement message. Here, the convention followed is that for an application message, the character ‘M’ will be present and for the acknowledgements, the character ‘A’ is present.
+
+
+The message_id is an integer (4 bytes) that is appended in the network byte order using memcpy.
+
+The actual message sent to the r_sendto is then appended starting from the index 5. The total length of the array is taken as 110, which would mean a max of 105 bytes for the user message ( assumed to be maximum of 100 bytes).
+
+
+Note: For an acknowledgement, the size of the message is taken only a 5 bytes, since there is no user message to be sent. Only the first indicator character and the next 4 bytes for the id are sent.
+Data structures used:
+
+
+1. Unacknowledged message table:
+        The unacknowledged message table is taken as an array of struct objects of type:
+
+
+                typedef struct {
+                int id;
+        char message[110];
+        int msg_len;
+        struct sockaddr_in dest_addr;
+        struct timeval tv;
+}unack_msg_node;
+
+
+        Here, the id is the message id, message is an array containing the final message sent to the other end in the format described above, msg_len is the length of the message sent, used for retransmission, dest_addr is the structure that contains the protocol, IP and port of the receiver socket to which this message was originally sent. tv holds the value of the seconds and microseconds at the time when the message was sent. This is obtained via the gettimeofday() call. 
+This is array is created dynamically in the r_socket call. It is assumed that at most 100 messages will be outstanding at any time, and thus an array of 100 is initialised.
+
+
+1. Receive Buffer
+        This is also an array of struct objects of type:
+
+
+typedef struct {
+        char message[101];
+        struct sockaddr_in source_addr;
+        int msg_len;
+}recv_buff_node;
+
+
+        Here, the buffer holds the message to be sent to the user program, its length ( which will be the return value of r_recvfrom if the user asks for a sufficient size to be received) and the structure for the source’s protocol, IP and port. 
+This is array is created dynamically in the r_socket call. It is assumed that at most 100 messages will be received at any time, and thus an array of 100 is initialised.
+
+
+1. Received message id table:
+        This is taken as a simple array of integers. This is array is created dynamically in the r_socket call. It is assumed that at most 100 messages will be received by the socket, and thus an array of 100 is initialised.
+
+
+Description of the files:
+1. rsocket.c - This file contains the code for the library for MRP socket. It has the various api function calls like r_socket, r_send, r_recvfrom, r_bind, r_close etc along with the auxillary functions that are needed for the implementation. All the related data structures specified earlier are declared in this file as global variables. Mutual exclusion is implemented here using pthread_mutex locks. 
+2. rsocket.h - this include file contains prototypes for the functions specified in rsocket.c It also contains the typedefs for the datastructure nodes mentioned before. 
+3. user1.c - This is a sample code for a sender. It creates a socket, binds it to port 53030, reads a string from user and sends each character in a message to user2.c and then closes its socket.
+4. user2.c - This is  sample code for a receiver. It creates a socket and binds it to port 53031. It is in an infinite loop calling r_recvfrom and receiving characters sent by user2. The received messages are then printed on the terminal.
+5. Makefile - Contains the list commands for making a static library from rsocket.c, compiling the user1.c and user2.c files along with the library.
